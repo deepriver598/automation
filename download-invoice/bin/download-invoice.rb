@@ -1,39 +1,44 @@
-require 'inifile'
-require 'date'
 require 'csv'
+require 'date'
+require 'fileutils'
+require 'inifile'
 require 'logger'
 require 'selenium-webdriver'
 
 class DownloadInvoice
   def initialize
     # ログ出力処理を初期化
-    @log = Logger.new('../log/download-invoice.log')
+    pwd = File.expand_path(File.dirname(__FILE__))
+
+    @log = Logger.new(File.expand_path('../log/download-invoice.log', pwd))
     @log.info("処理を開始します")
 
     # confファイルをパース
     @log.info("configを読み込みます")
-    @conf = IniFile.load('../conf/download-invoice.conf')
+    @conf = IniFile.load(File.expand_path('../conf/download-invoice.conf', pwd))
 
     # AWS関連設定情報読み込み
     @billing_url = @conf["general"]["BILLING_URL"]
     @credential_pattern = @conf["general"]["CREDENTIAL_PATTERN"]
 
-    # ブラウザ操作に関する設定読み込み
-    @driver = Selenium::WebDriver.for :firefox
+    # ダウンロードに関する設定読み込み
     @profile = Selenium::WebDriver::Firefox::Profile.new
+    @profile["browser.download.folderList"] = @conf["profile"]["browser.download.folderList"]
+    @download_dir = @conf["profile"]["browser.download.dir"]
+    @profile["browser.download.dir"] = @download_dir
+    @profile["browser.helperApps.neverAsk.saveToDisk"] = @conf["profile"]["browser.helperApps.neverAsk.saveToDisk"]
+    @profile["pdfjs.disabled"] = @conf["profile"]["pdfjs.disabled"]
+    @profile["plugin.scan.plid.all"] = @conf["profile"]["plugin.scan.plid.all"]
+    @profile["plugin.scan.Acrobat"] = @conf["profile"]["plugin.scan.Acrobat"]
+
+    # ブラウザ操作に関する設定読み込み
+    @driver = Selenium::WebDriver.for :firefox, profile: @profile
     @accept_next_alert = @conf["webdriver"]["accept_next_alert"]
     @driver.manage.timeouts.implicit_wait = @conf["webdriver"]["driver.manage.timeouts.implicit_wait"].to_i
     @verification_errors = @conf["webdriver"]["verification_errors"]
-
-    # ダウンロードに関する設定読み込み
-    @profile["browser.download.folderList"] = @conf["download"]["browser.download.folderList"]
-    @profile["browser.download.dir"] = @conf["download"]["downlod.dir"]
-    @profile["browser.helperApps.neverAsk.saveToDisk"] = @conf["download"]["browser.helperApps.neverAsk.saveToDisk"]
-    @profile["pdfjs.disabled"] = @conf["download"]["pdfjs.disabled"]
-    @profile["plugin.scan.plid.all"] = @conf["download"]["plugin.scan.plid.all"]
-    @profile["plugin.scan.Acrobat"] = @conf["download"]["plugin.scan.Acrobat"]
   end
 
+  # 初期化処理
   def init
     @iam_url = nil
     @account = nil
@@ -50,10 +55,10 @@ class DownloadInvoice
   def get_login_info(file)
     csv = CSV.read(file, headers: true)
     csv.each {|record|
-      @username = record["User Name"]
-      @password = record["Password"]
-      @iam_url  = record["Direct Signin Link"]
-      @account  = record["Direct Signin Link"].split('.')[0].sub("https://", "")
+      @username = record["User Name"].encode('utf-8')
+      @password = record["Password"].encode('utf-8')
+      @iam_url  = record["Direct Signin Link"].encode('utf-8')
+      @account  = record["Direct Signin Link"].encode('utf-8').split('.')[0].sub("https://", "")
     }
   end
 
@@ -85,7 +90,9 @@ class DownloadInvoice
     (Date.new(Date.today.year, Date.today.month, 1) -1).to_s
   end
 
+  # invoiceのフィルターを行う
   def filter_invoice(from_date, to_date)
+    @driver.find_element(:xpath, "//span[text()='フィルター']")
     @driver.find_element(:xpath, "//input[@type='text']").clear
     @driver.find_element(:xpath, "//input[@type='text']").send_keys from_date
     @driver.find_element(:xpath, "(//input[@type='text'])[2]").clear
@@ -101,15 +108,18 @@ class DownloadInvoice
     result.map(&:text)
   end
 
+  # invoiceをダウンロードする
   def download_invoice(invoice_number)
     @driver.find_element(:link, invoice_number).click
   end
 
+  # AWSマネジメントコンソールからサインアウトする
   def signout
     @driver.find_element(:css, "#nav-usernameMenu > div.nav-elt-label").click
     @driver.find_element(:id, "aws-console-logout").click
   end
 
+  # ブラウザを終了する
   def close
     @driver.quit
   end
@@ -147,11 +157,18 @@ class DownloadInvoice
     @accept_next_alert = true
   end
 
+  # 実行処理
   def execute
     begin
       # クレデンシャルCSVファイルの一覧を読み込み
+      csv_files = []
       @log.info(@credential_pattern + " からクレデンシャルCSVファイルを取得します")
       csv_files = read_files(@credential_pattern) unless Dir.exist?(@credential_pattern)
+
+      if csv_files.empty?
+        @log.info("クレデンシャルCSVファイルが存在しません")
+        exit
+      end
 
       # クレデンシャルCSVファイルごとに処理
       csv_files.each {|file|
@@ -160,7 +177,7 @@ class DownloadInvoice
         init
 
         # 認証情報をCSVファイルから取得
-        @log.info(file + " から認証情報を取得します")
+        @log.info(file.encode("utf-8") + " から認証情報を取得します")
         get_login_info(file)
 
         # IAMユーザログインページへアクセス
@@ -184,16 +201,31 @@ class DownloadInvoice
         filter_invoice(from_date, to_date)
         sleep 1
 
-        # invoiceダウンロード
+        # 取得対象invoice一覧取得
         @log.info("対象のinvoice一覧を取得します")
         invoice_numbers = get_invoice_numbers
+        if invoice_numbers.empty?
+          @log.info("対象のinvoiceが存在しません")
+          next
+        end
+        @log.info("対象のinvoiceは " + invoice_numbers.to_s + " です")
+
+        # 格納先のディレクトリがない場合は作成
+        unless FileTest.exist?(@download_dir)
+          @log.info("格納先のディレクトリが存在しないため作成します")
+          FileUtils.mkdir_p(@download_dir)
+        end
+
+        # invoiceダウンロード
         invoice_numbers.each{|invoice_number|
           @log.info("invoice-number:" + invoice_number + " をダウンロードします")
           download_invoice(invoice_number)
+          sleep 3
         }
         # サインアウト
         @log.info("サインアウトします")
         signout
+        sleep 3
       }
     rescue Exception => e
       @log.error(e)
