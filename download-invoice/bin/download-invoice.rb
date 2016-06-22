@@ -21,8 +21,9 @@ class DownloadInvoice
     @billing_url = @conf["general"]["BILLING_URL"]
     @credential_pattern = @conf["general"]["CREDENTIAL_PATTERN"]
 
-    # ダウンロードに関する設定読み込み
+    # ブラウザ設定に関する設定読み込み
     @profile = Selenium::WebDriver::Firefox::Profile.new
+    @profile["browser.startup.homepage"] = @conf["profile"]["browser.startup.homepage"]
     @profile["browser.download.folderList"] = @conf["profile"]["browser.download.folderList"]
     @download_dir = @conf["profile"]["browser.download.dir"]
     @profile["browser.download.dir"] = @download_dir
@@ -31,7 +32,7 @@ class DownloadInvoice
     @profile["plugin.scan.plid.all"] = @conf["profile"]["plugin.scan.plid.all"]
     @profile["plugin.scan.Acrobat"] = @conf["profile"]["plugin.scan.Acrobat"]
 
-    # ブラウザ操作に関する設定読み込み
+    # ブラウザのドライバに関する設定読み込み
     @driver = Selenium::WebDriver.for :firefox, profile: @profile
     @accept_next_alert = @conf["webdriver"]["accept_next_alert"]
     @driver.manage.timeouts.implicit_wait = @conf["webdriver"]["driver.manage.timeouts.implicit_wait"].to_i
@@ -93,6 +94,7 @@ class DownloadInvoice
   # invoiceのフィルターを行う
   def filter_invoice(from_date, to_date)
     @driver.find_element(:xpath, "//span[text()='フィルター']")
+    sleep 1
     @driver.find_element(:xpath, "//input[@type='text']").clear
     @driver.find_element(:xpath, "//input[@type='text']").send_keys from_date
     @driver.find_element(:xpath, "(//input[@type='text'])[2]").clear
@@ -102,7 +104,7 @@ class DownloadInvoice
     @driver.find_element(:xpath, "//span[text()='フィルター']")
   end
 
-  # invoice_idが格納された配列を返す => ["68804441", "69154123"]
+  # invoice_idが格納された配列を返す
   def get_invoice_numbers
     result = @driver.find_elements(:xpath, "//a[contains(@title, '請求書のダウンロード')]")
     result.map(&:text)
@@ -122,39 +124,6 @@ class DownloadInvoice
   # ブラウザを終了する
   def close
     @driver.quit
-  end
-
-  def element_present?(how, what)
-    @driver.find_element(how, what)
-    true
-  rescue Selenium::WebDriver::Error::NoSuchElementError
-    false
-  end
-
-  def alert_present?
-    @driver.switch_to.alert
-    true
-  rescue Selenium::WebDriver::Error::NoAlertPresentError
-    false
-  end
-
-  def verify(&blk)
-    yield
-  rescue ExpectationNotMetError => ex
-    @verification_errors << ex
-  end
-
-  def close_alert_and_get_its_text(how, what)
-    alert = @driver.switch_to().alert()
-    alert_text = alert.text
-    if (@accept_next_alert) then
-      alert.accept()
-    else
-      alert.dismiss()
-    end
-    alert_text
-  ensure
-    @accept_next_alert = true
   end
 
   # 実行処理
