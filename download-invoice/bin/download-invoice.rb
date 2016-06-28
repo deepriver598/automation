@@ -132,10 +132,10 @@ class DownloadInvoice
       # クレデンシャルCSVファイルの一覧を読み込み
       csv_files = []
       @log.info(@credential_pattern + " からクレデンシャルCSVファイルを取得します")
-      csv_files = read_files(@credential_pattern) unless Dir.exist?(@credential_pattern)
+      csv_files = read_files(@credential_pattern) if Dir.exist?(File.dirname(@credential_pattern))
 
       if csv_files.empty?
-        @log.info("クレデンシャルCSVファイルが存在しません")
+        @log.error("クレデンシャルCSVファイルが存在しません")
         exit
       end
 
@@ -174,7 +174,7 @@ class DownloadInvoice
         @log.info("対象のinvoice一覧を取得します")
         invoice_numbers = get_invoice_numbers
         if invoice_numbers.empty?
-          @log.info("対象のinvoiceが存在しません")
+          @log.warn("対象のinvoiceが存在しません")
           next
         end
         @log.info("対象のinvoiceは " + invoice_numbers.to_s + " です")
