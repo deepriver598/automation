@@ -18,22 +18,16 @@ class DownloadInvoice
     @conf = IniFile.load(File.expand_path('../conf/download-invoice.conf', pwd))
 
     # AWS関連設定情報読み込み
-    @billing_url = @conf["general"]["BILLING_URL"]
-    @credential_pattern = @conf["general"]["CREDENTIAL_PATTERN"]
-
-    # ブラウザ設定に関する設定読み込み
-    @profile = Selenium::WebDriver::Firefox::Profile.new
-    @profile["browser.startup.homepage"] = @conf["profile"]["browser.startup.homepage"]
-    @profile["browser.download.folderList"] = @conf["profile"]["browser.download.folderList"]
-    @download_dir = @conf["profile"]["browser.download.dir"]
-    @profile["browser.download.dir"] = @download_dir
-    @profile["browser.helperApps.neverAsk.saveToDisk"] = @conf["profile"]["browser.helperApps.neverAsk.saveToDisk"]
-    @profile["pdfjs.disabled"] = @conf["profile"]["pdfjs.disabled"]
-    @profile["plugin.scan.plid.all"] = @conf["profile"]["plugin.scan.plid.all"]
-    @profile["plugin.scan.Acrobat"] = @conf["profile"]["plugin.scan.Acrobat"]
+    @billing_url = @conf["general"]["billing_url"]
+    @credential_pattern = @conf["general"]["credential_pattern"]
+    @download_dir = @conf["webdriver"]["browser.download.dir"]
 
     # ブラウザのドライバに関する設定読み込み
-    @driver = Selenium::WebDriver.for :firefox, profile: @profile
+    caps = Selenium::WebDriver::Remote::Capabilities.chrome(
+      "chromeOptions" => {"args" => [ "--disable-download-notification"],
+      "prefs" => {"download" => {"default_directory" => @download_dir} }}
+    )
+    @driver = Selenium::WebDriver.for :chrome, desired_capabilities: caps
     @accept_next_alert = @conf["webdriver"]["accept_next_alert"]
     @driver.manage.timeouts.implicit_wait = @conf["webdriver"]["driver.manage.timeouts.implicit_wait"].to_i
     @verification_errors = @conf["webdriver"]["verification_errors"]
@@ -118,12 +112,14 @@ class DownloadInvoice
   # AWSマネジメントコンソールからサインアウトする
   def signout
     @driver.find_element(:css, "#nav-usernameMenu > div.nav-elt-label").click
+    sleep 1
     @driver.find_element(:id, "aws-console-logout").click
   end
 
   # ブラウザを終了する
   def close
     @driver.quit
+    sleep 3
   end
 
   # 実行処理
@@ -168,7 +164,7 @@ class DownloadInvoice
         to_date = get_last_month_end_date
         @log.info(from_date + " から" + to_date + " の期間でフィルタリングします")
         filter_invoice(from_date, to_date)
-        sleep 1
+        sleep 3
 
         # 取得対象invoice一覧取得
         @log.info("対象のinvoice一覧を取得します")
