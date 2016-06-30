@@ -10,8 +10,8 @@ class DownloadInvoice
   def initialize
     # ログ出力処理を初期化
     pwd = File.expand_path(File.dirname(__FILE__))
-
-    @log = Logger.new(File.expand_path('../log/download-invoice.log', pwd))
+    datetime = Time.now.strftime("%Y-%m-%d-%H%M")
+    @log = Logger.new(File.expand_path(("../log/download-invoice_" + datetime + ".log"), pwd))
     @log.info("処理を開始します")
 
     # confファイルをパース
