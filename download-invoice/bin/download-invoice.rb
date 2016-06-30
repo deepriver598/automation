@@ -232,6 +232,7 @@ class DownloadInvoice
       rescue Exception => e
         @log.error(e)
         puts e
+        @log.info("例外が発生したため次のアカウントへ移ります")
         next
       end
     }
