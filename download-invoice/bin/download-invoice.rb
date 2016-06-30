@@ -144,14 +144,6 @@ class DownloadInvoice
     sleep 3
   end
 
-  # 第2引数に与えられた処理(ブロック)が完了するのを第1引数秒間待機する
-  def wait_until(sec)
-    wait = Selenium::WebDriver::Wait.new(:timeout => sec)
-    wait.until { yield }
-  rescue Selenium::WebDriver::Error::TimeOutError
-    # 要素がないときは特に何もせず例外を握りつぶす
-  end
-
   # 実行処理
   def execute
     begin
@@ -192,7 +184,7 @@ class DownloadInvoice
         sleep 5
 
         # パスワード有効期限確認ページが存在するか判定
-        if wait_until(5) { password_expiration_screen? }
+        if password_expiration_screen?
           @log.info("パスワード有効期限確認ページが表示されました。スキップします")
           @driver.find_element(:id, "continue_button").click
         end
