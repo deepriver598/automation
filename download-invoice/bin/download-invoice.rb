@@ -6,6 +6,7 @@ require 'logger'
 require 'selenium-webdriver'
 
 class DownloadInvoice
+  # 起動時に実行される処理
   def initialize
     # ログ出力処理を初期化
     pwd = File.expand_path(File.dirname(__FILE__))
@@ -31,9 +32,13 @@ class DownloadInvoice
     @accept_next_alert = @conf["webdriver"]["accept_next_alert"]
     @driver.manage.timeouts.implicit_wait = @conf["webdriver"]["driver.manage.timeouts.implicit_wait"].to_i
     @verification_errors = @conf["webdriver"]["verification_errors"]
+  rescue Exception => e
+    @log.error(e)
+    puts e
+    raise
   end
 
-  # 初期化処理
+  # アカウントごとに異なる情報を初期化する
   def init
     @iam_url = nil
     @account = nil
@@ -62,6 +67,19 @@ class DownloadInvoice
     @driver.get(url)
   end
 
+  # パスワード確認画面かどうかを判定する
+  def password_expiration_screen?
+    result = @driver.find_element(:id, "passwordexpiration_form")
+    return true unless result.nil?
+  rescue Selenium::WebDriver::Error::NoSuchElementError
+    return false
+  end
+
+  # パスワード有効期限通知画面をスキップする
+  def skip_password_expiration_screen
+    @driver.find_element(:id, "continue_button").click
+  end
+
   # IAMサインインURLからAWSマネジメントコンソールにログインする
   def signin(account, user, password)
     @driver.find_element(:id, "account").clear
@@ -71,6 +89,10 @@ class DownloadInvoice
     @driver.find_element(:id, "password").clear
     @driver.find_element(:id, "password").send_keys password
     @driver.find_element(:id, "signin_button").click
+  end
+
+  # AWSマネジメントコンソールにログイン完了したかを判定する
+  def succeed_signin?
     @driver.find_element(:id, "nav-logo")
   end
 
@@ -122,6 +144,14 @@ class DownloadInvoice
     sleep 3
   end
 
+  # 第2引数に与えられた処理(ブロック)が完了するのを第1引数秒間待機する
+  def wait_until(sec)
+    wait = Selenium::WebDriver::Wait.new(:timeout => sec)
+    wait.until { yield }
+  rescue Selenium::WebDriver::Error::TimeOutError
+    # 要素がないときは特に何もせず例外を握りつぶす
+  end
+
   # 実行処理
   def execute
     begin
@@ -134,7 +164,14 @@ class DownloadInvoice
         @log.error("クレデンシャルCSVファイルが存在しません")
         exit
       end
+    rescue Exception => e
+      @log.error(e)
+      puts e
+      close
+      raise
+    end
 
+    begin
       # クレデンシャルCSVファイルごとに処理
       csv_files.each {|file|
         # 初期化処理
@@ -153,6 +190,15 @@ class DownloadInvoice
         @log.info("サインインします")
         signin(@account, @username, @password)
         sleep 5
+
+        # パスワード有効期限確認ページが存在するか判定
+        if wait_until(5) { password_expiration_screen? }
+          @log.info("パスワード有効期限確認ページが表示されました。スキップします")
+          @driver.find_element(:id, "continue_button").click
+        end
+
+        # サインインが成功しているか確認する
+        succeed_signin?
 
         # 課金ページへ移動
         @log.info(@billing_url + "へアクセスします")
@@ -195,12 +241,12 @@ class DownloadInvoice
     rescue Exception => e
       @log.error(e)
       puts e
-      raise
-    ensure
-      # 終了処理
-      @log.info("処理を終了します")
-      close
+      next
     end
+
+    # 終了処理
+    @log.info("処理を終了します")
+    close
   end
 end
 
