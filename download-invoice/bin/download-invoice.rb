@@ -7,30 +7,36 @@ require 'selenium-webdriver'
 
 class DownloadInvoice
   def initialize
-    # ログ出力処理を初期化
-    pwd = File.expand_path(File.dirname(__FILE__))
+    begin
+      # ログ出力処理を初期化
+      pwd = File.expand_path(File.dirname(__FILE__))
 
-    @log = Logger.new(File.expand_path('../log/download-invoice.log', pwd))
-    @log.info("処理を開始します")
+      @log = Logger.new(File.expand_path('../log/download-invoice.log', pwd))
+      @log.info("処理を開始します")
 
-    # confファイルをパース
-    @log.info("configを読み込みます")
-    @conf = IniFile.load(File.expand_path('../conf/download-invoice.conf', pwd))
+      # confファイルをパース
+      @log.info("configを読み込みます")
+      @conf = IniFile.load(File.expand_path('../conf/download-invoice.conf', pwd))
 
-    # AWS関連設定情報読み込み
-    @billing_url = @conf["general"]["billing_url"]
-    @credential_pattern = @conf["general"]["credential_pattern"]
-    @download_dir = @conf["webdriver"]["browser.download.dir"]
+      # AWS関連設定情報読み込み
+      @billing_url = @conf["general"]["billing_url"]
+      @credential_pattern = @conf["general"]["credential_pattern"]
+      @download_dir = @conf["webdriver"]["browser.download.dir"]
 
-    # ブラウザのドライバに関する設定読み込み
-    caps = Selenium::WebDriver::Remote::Capabilities.chrome(
-      "chromeOptions" => {"args" => [ "--disable-download-notification"],
-      "prefs" => {"download" => {"default_directory" => @download_dir} }}
-    )
-    @driver = Selenium::WebDriver.for :chrome, desired_capabilities: caps
-    @accept_next_alert = @conf["webdriver"]["accept_next_alert"]
-    @driver.manage.timeouts.implicit_wait = @conf["webdriver"]["driver.manage.timeouts.implicit_wait"].to_i
-    @verification_errors = @conf["webdriver"]["verification_errors"]
+      # ブラウザのドライバに関する設定読み込み
+      caps = Selenium::WebDriver::Remote::Capabilities.chrome(
+        "chromeOptions" => {"args" => [ "--disable-download-notification"],
+        "prefs" => {"download" => {"default_directory" => @download_dir} }}
+      )
+      @driver = Selenium::WebDriver.for :chrome, desired_capabilities: caps
+      @accept_next_alert = @conf["webdriver"]["accept_next_alert"]
+      @driver.manage.timeouts.implicit_wait = @conf["webdriver"]["driver.manage.timeouts.implicit_wait"].to_i
+      @verification_errors = @conf["webdriver"]["verification_errors"]
+    rescue Exception => e
+      @log.error(e)
+      puts e
+      raise
+    end
   end
 
   # 初期化処理
@@ -134,7 +140,14 @@ class DownloadInvoice
         @log.error("クレデンシャルCSVファイルが存在しません")
         exit
       end
+    rescue Exception => e
+      @log.error(e)
+      puts e
+      close
+      raise
+    end
 
+    begin
       # クレデンシャルCSVファイルごとに処理
       csv_files.each {|file|
         # 初期化処理
@@ -195,12 +208,13 @@ class DownloadInvoice
     rescue Exception => e
       @log.error(e)
       puts e
-      raise
-    ensure
-      # 終了処理
-      @log.info("処理を終了します")
-      close
+      next
     end
+
+    # 終了処理
+    @log.info("処理を終了します")
+    close
+
   end
 end
 
