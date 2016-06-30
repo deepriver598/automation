@@ -171,9 +171,9 @@ class DownloadInvoice
       raise
     end
 
-    begin
-      # クレデンシャルCSVファイルごとに処理
-      csv_files.each {|file|
+    # クレデンシャルCSVファイルごとに処理
+    csv_files.each {|file|
+      begin
         # 初期化処理
         @log.info("ログイン情報を初期化します")
         init
@@ -237,13 +237,12 @@ class DownloadInvoice
         @log.info("サインアウトします")
         signout
         sleep 3
-      }
-    rescue Exception => e
-      @log.error(e)
-      puts e
-      next
-    end
-
+      rescue Exception => e
+        @log.error(e)
+        puts e
+        next
+      end
+    }
     # 終了処理
     @log.info("処理を終了します")
     close
