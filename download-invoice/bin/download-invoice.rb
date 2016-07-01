@@ -18,20 +18,18 @@ class DownloadInvoice
     @log.info("configを読み込みます")
     @conf = IniFile.load(File.expand_path('../conf/download-invoice.conf', pwd))
 
-    # AWS関連設定情報読み込み
+    # conf読み込み
     @billing_url = @conf["general"]["billing_url"]
     @credential_pattern = @conf["general"]["credential_pattern"]
     @download_dir = @conf["webdriver"]["browser.download.dir"]
 
-    # ブラウザのドライバに関する設定読み込み
+    # ブラウザ情報読み込み
     caps = Selenium::WebDriver::Remote::Capabilities.chrome(
       "chromeOptions" => {"args" => [ "--disable-download-notification"],
       "prefs" => {"download" => {"default_directory" => @download_dir} }}
     )
     @driver = Selenium::WebDriver.for :chrome, desired_capabilities: caps
-    @accept_next_alert = @conf["webdriver"]["accept_next_alert"]
     @driver.manage.timeouts.implicit_wait = @conf["webdriver"]["driver.manage.timeouts.implicit_wait"].to_i
-    @verification_errors = @conf["webdriver"]["verification_errors"]
   rescue Exception => e
     @log.error(e)
     puts e
@@ -229,6 +227,9 @@ class DownloadInvoice
         @log.info("サインアウトします")
         signout
         sleep 3
+
+        @log.info(file.encode("utf-8") + " のアカウントの処理が正常に完了しました")
+
       rescue Exception => e
         @log.error(e)
         puts e
