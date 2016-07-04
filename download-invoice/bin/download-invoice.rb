@@ -16,7 +16,7 @@ class DownloadInvoice
 
     # confファイルをパース
     @log.info("configを読み込みます")
-    @conf = IniFile.load(File.expand_path('../conf/download-invoice.conf', pwd))
+    @conf = IniFile.load(File.expand_path('../conf/download-invoice.conf', pwd), :encoding => 'UTF-8')
 
     # conf読み込み
     @billing_url = @conf["general"]["billing_url"]
