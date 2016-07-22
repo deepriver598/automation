@@ -95,14 +95,14 @@ class DownloadInvoice
   end
 
   # スクリプト実行月の前月1日の年月日を返す
-  def get_last_month_start_date
+  def get_last_month_first_date
     date = Date.new(Date.today.year, Date.today.month, 1) -1
     Date.new(date.year, date.month, 1).to_s
   end
 
-  # スクリプト実行月の前月末日の年月日を返す
-  def get_last_month_end_date
-    (Date.new(Date.today.year, Date.today.month, 1) -1).to_s
+  # スクリプト実行月の1日の年月日を返す
+  def get_this_month_first_date
+    (Date.new(Date.today.year, Date.today.month, 1)).to_s
   end
 
   # invoiceのフィルターを行う
@@ -196,8 +196,8 @@ class DownloadInvoice
         sleep 1
 
         # 対象invoice特定
-        from_date = get_last_month_start_date
-        to_date = get_last_month_end_date
+        from_date = get_last_month_first_date
+        to_date = get_this_month_first_date
         @log.info(from_date + " から" + to_date + " の期間でフィルタリングします")
         filter_invoice(from_date, to_date)
         sleep 3
